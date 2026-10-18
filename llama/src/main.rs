@@ -2,6 +2,7 @@ use anyhow::{Context, Result, ensure};
 use clap::{Parser, Subcommand};
 use llama_spain::{
     circuit::{LlamaExecutor, model_fingerprint, quantize, scale},
+    metrics::WireMetrics,
     model::{LlamaModel, write_tiny_fixture},
     trace::Trace,
 };
@@ -36,6 +37,15 @@ struct Cli {
 enum Command {
     Forward(Options),
     Prove(Options),
+    /// Prepare reusable DARK bases before timed measurements (no model execution).
+    PrepareCache {
+        #[arg(long)]
+        witness_log2: usize,
+        #[arg(long, default_value_t = 256)]
+        dark_chunks: usize,
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
     /// Create a deterministic small complete model and exercise the actual proof protocol.
     TinyTest {
         #[arg(long)]
@@ -72,6 +82,34 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Forward(options) => run(options, false),
         Command::Prove(options) => run(options, true),
+        Command::PrepareCache {
+            witness_log2,
+            dark_chunks,
+            output,
+        } => {
+            ensure!(
+                dark_chunks.is_power_of_two(),
+                "dark-chunks must be a positive power of two"
+            );
+            ensure!(
+                witness_log2 < usize::BITS as usize
+                    && witness_log2 > dark_chunks.trailing_zeros() as usize,
+                "witness-log2 must define a witness larger than dark-chunks"
+            );
+            let before = dark_cache_snapshot()?;
+            let started = Instant::now();
+            let mut public = dark::public::PublicParams::new(30000, witness_log2, dark_chunks, 128);
+            public.build_pippenger_bases();
+            let report = json!({"witness_log2":witness_log2,"dark_chunks":dark_chunks,"required_bases":public.chunk_size(),"loaded_bases":public.pippenger_bases.len(),"seconds":started.elapsed().as_secs_f64(),"cache_before":before,"cache_after":dark_cache_snapshot()?});
+            if let Some(path) = output {
+                if let Some(parent) = path.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                write_json(&path, &report)?;
+            }
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            Ok(())
+        }
         Command::TinyTest { output_dir } => {
             let dir = output_dir.join("model");
             write_tiny_fixture(&dir)?;
@@ -158,7 +196,27 @@ fn peak_rss_kib() -> Option<u64> {
         .parse()
         .ok()
 }
+fn dark_cache_snapshot() -> Result<Vec<Value>> {
+    let directory = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("dark");
+    let mut files = fs::read_dir(directory)?
+        .map(|entry| Ok(entry?.path()))
+        .collect::<Result<Vec<_>>>()?;
+    files.sort();
+    files.into_iter().filter_map(|path| {
+        let name = path.file_name()?.to_str()?.to_owned();
+        let suffix = name.strip_prefix("dark_pip_base_")?;
+        let (bits, q_bits) = suffix.split_once('_')?;
+        let bits = bits.parse::<u32>().ok()?;
+        if q_bits != "30000" { return None; }
+        Some(path.metadata().map(|metadata| json!({"name":name,"bytes":metadata.len(),"bases":1u64.checked_shl(bits)})).map_err(Into::into))
+    }).collect()
+}
 fn run(options: Options, prove: bool) -> Result<()> {
+    let end_to_end_start = Instant::now();
+    let cache_before = dark_cache_snapshot()?;
     for name in [
         "statement.json",
         "primary_witness.i128le",
@@ -185,7 +243,9 @@ fn run(options: Options, prove: bool) -> Result<()> {
     fs::create_dir_all(&options.output_dir)?;
     let input = tokens(&options.input_ids)?;
     let model = Arc::new(LlamaModel::load(&options.model_dir)?);
+    let phase_start = Instant::now();
     let layout = model.layout(&input)?;
+    let verifier_layout_seconds = phase_start.elapsed().as_secs_f64();
     let activation_count: usize = layout
         .nodes
         .iter()
@@ -256,21 +316,28 @@ fn run(options: Options, prove: bool) -> Result<()> {
     if !prove {
         return Ok(());
     }
+    let phase_start = Instant::now();
     let denominator = scale(options.scale_bits);
     let claim = trace
         .logits()
         .iter()
         .map(|x| quantize(x, &denominator))
         .collect::<Vec<_>>();
+    let prover_claim_seconds = phase_start.elapsed().as_secs_f64();
     write_json(
         &options.output_dir.join("statement.json"),
         &json!({"schema":"spain-llama-statement-v1","model":identity,"model_fingerprint_sha256":fingerprint,"input_ids":input,"positions":(0..input.len()).collect::<Vec<_>>(),"scale_bits":options.scale_bits,"epsilon":options.epsilon,"logits_scaled":claim.iter().map(ToString::to_string).collect::<Vec<_>>(),"layers":model.config.num_hidden_layers,"vocabulary":model.config.vocab_size,"arithmetic":"MPFR-128 / negative-exp Pade[3/3] / 10 squares","status":"claim_fixed_before_challenge"}),
     )?;
     eprintln!("Building primary circuit and high precision witness");
+    let phase_start = Instant::now();
     let prover_exec = LlamaExecutor::new(model.clone(), trace, &claim, options.scale_bits)?;
+    let prover_circuit_setup_seconds = phase_start.elapsed().as_secs_f64();
     // Derive the verifier's program from its model/config, without executing a forward pass.
+    let phase_start = Instant::now();
     let verifier_exec = LlamaExecutor::new(model.clone(), layout, &claim, options.scale_bits)?;
+    let verifier_circuit_setup_seconds = phase_start.elapsed().as_secs_f64();
     let metadata = prover_exec.get_meta();
+    let dark_required_bases = metadata.num_witness_values.next_power_of_two() / options.dark_chunks;
     ensure!(
         options.dark_chunks < metadata.num_witness_values.next_power_of_two(),
         "dark-chunks must be smaller than the padded primary witness"
@@ -296,7 +363,10 @@ fn run(options: Options, prove: bool) -> Result<()> {
         "Running actual Spain protocol (primary witness: {} elements)",
         metadata.num_witness_values
     );
+    let phase_start = Instant::now();
     let p = ProverState::new(prover_exec, denominator, metadata.clone(), 1, false);
+    let prover_state_setup_seconds = phase_start.elapsed().as_secs_f64();
+    let phase_start = Instant::now();
     let v = VerifierState::new(
         options.epsilon,
         1,
@@ -308,17 +378,31 @@ fn run(options: Options, prove: bool) -> Result<()> {
         verifier_exec,
         metadata,
     );
+    let verifier_state_setup_seconds = phase_start.elapsed().as_secs_f64();
     let mut prover = SpainProver::new(p);
     let mut verifier = SpainVerifier::new(v);
     let constraints = prover.num_constraints();
     let mut transcript = BufWriter::new(File::create(options.output_dir.join("transcript.jsonl"))?);
+    let started = Instant::now();
+    let phase_start = Instant::now();
     let (mut message, mut to_prover) = (verifier.init_message()?, true);
+    let mut verifier_protocol_seconds = phase_start.elapsed().as_secs_f64();
+    let mut prover_protocol_seconds = 0.;
+    let mut prover_serialization_seconds = 0.;
+    let mut verifier_serialization_seconds = 0.;
     let mut messages = 0usize;
     let mut bytes = 0usize;
+    let mut wire = WireMetrics::default();
     let mut squared_error = None;
-    let started = Instant::now();
     loop {
+        let phase_start = Instant::now();
         let encoded = serde_json::to_vec(&message)?;
+        if to_prover {
+            verifier_serialization_seconds += phase_start.elapsed().as_secs_f64();
+        } else {
+            prover_serialization_seconds += phase_start.elapsed().as_secs_f64();
+        }
+        wire.record(&message, to_prover, encoded.len())?;
         bytes += encoded.len();
         messages += 1;
         transcript.write_all(&encoded)?;
@@ -331,11 +415,17 @@ fn run(options: Options, prove: bool) -> Result<()> {
             _ => {}
         }
         eprintln!("Protocol message {messages}: {}", message_name(&message));
+        let phase_start = Instant::now();
         let response = if to_prover {
             prover.handle_message(&message)
         } else {
             verifier.handle_message(&message)
         };
+        if to_prover {
+            prover_protocol_seconds += phase_start.elapsed().as_secs_f64();
+        } else {
+            verifier_protocol_seconds += phase_start.elapsed().as_secs_f64();
+        }
         match response {
             Some(next) => {
                 message = next;
@@ -351,9 +441,24 @@ fn run(options: Options, prove: bool) -> Result<()> {
     );
     let p = prover.get_eval_result();
     let v = verifier.get_eval_result();
+    let prover_seconds = seconds
+        + prover_claim_seconds
+        + prover_circuit_setup_seconds
+        + prover_state_setup_seconds
+        + prover_protocol_seconds
+        + prover_serialization_seconds;
+    let verifier_seconds = verifier_layout_seconds
+        + verifier_circuit_setup_seconds
+        + verifier_state_setup_seconds
+        + verifier_protocol_seconds
+        + verifier_serialization_seconds;
+    ensure!(
+        wire.prover_message_bytes + wire.verifier_message_bytes == bytes,
+        "message byte accounting mismatch"
+    );
     write_json(
         &options.output_dir.join("proof_report.json"),
-        &json!({"verified":true,"protocol":"Spain interactive commitment/sum-check/DARK","scope":"all decoder layers, final RMSNorm, full-vocabulary last-position logits","layers":model.config.num_hidden_layers,"vocabulary":model.config.vocab_size,"input_tokens":input.len(),"constraints":constraints,"messages":messages,"communication_bytes_including_public_statement":bytes,"constraint_squared_error_integer":squared_error,"scale_bits":options.scale_bits,"epsilon":options.epsilon,"dark_chunks":options.dark_chunks,"proof_wall_seconds":started.elapsed().as_secs_f64(),"forward_seconds":seconds,"peak_rss_kib":peak_rss_kib(),"prover_statistics":format!("{p:#?}"),"verifier_statistics":format!("{v:#?}")}),
+        &json!({"measurement_schema_version":2,"verified":true,"protocol":"Spain interactive commitment/sum-check/DARK","scope":"all decoder layers, final RMSNorm, full-vocabulary last-position logits","layers":model.config.num_hidden_layers,"vocabulary":model.config.vocab_size,"input_tokens":input.len(),"constraints":constraints,"messages":messages,"communication_bytes_including_public_statement":bytes,"proof_size_bytes":wire.proof_size_bytes,"proof_size_excluding_public_bytes":wire.proof_size_excluding_public_bytes,"prover_message_bytes":wire.prover_message_bytes,"verifier_message_bytes":wire.verifier_message_bytes,"constraint_squared_error_integer":squared_error,"scale_bits":options.scale_bits,"epsilon":options.epsilon,"dark_chunks":options.dark_chunks,"dark_required_bases":dark_required_bases,"dark_cache_before":cache_before,"dark_cache_after":dark_cache_snapshot()?,"proof_wall_seconds":started.elapsed().as_secs_f64(),"forward_seconds":seconds,"prover_claim_seconds":prover_claim_seconds,"peak_rss_kib":peak_rss_kib(),"memory_scope":"whole process: prover, verifier, forward, and serialization","prover_seconds":prover_seconds,"verifier_seconds":verifier_seconds,"prover_protocol_seconds":prover_protocol_seconds,"verifier_protocol_seconds":verifier_protocol_seconds,"prover_circuit_setup_seconds":prover_circuit_setup_seconds,"verifier_circuit_setup_seconds":verifier_circuit_setup_seconds,"prover_state_setup_seconds":prover_state_setup_seconds,"verifier_state_setup_seconds":verifier_state_setup_seconds,"verifier_layout_seconds":verifier_layout_seconds,"prover_serialization_seconds":prover_serialization_seconds,"verifier_serialization_seconds":verifier_serialization_seconds,"end_to_end_seconds":end_to_end_start.elapsed().as_secs_f64(),"timing_scope":"party active wall time including assigned frontend work and outgoing JSON serialization; excludes shared model loading, manifest hashing, artifact I/O, network and deserialization","prover_statistics":format!("{p:#?}"),"verifier_statistics":format!("{v:#?}")}),
     )?;
     eprintln!("Complete model Spain proof VERIFIED");
     Ok(())

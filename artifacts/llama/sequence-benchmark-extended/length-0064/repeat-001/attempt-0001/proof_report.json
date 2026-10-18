@@ -1,0 +1,55 @@
+{
+  "communication_bytes_including_public_statement": 210018462,
+  "constraint_squared_error_integer": "67272453972850865550208017741331243061687771809072362754142902836651190480144878475004511800424885947382496465802512973733898953283862390829481984",
+  "constraints": 269026754,
+  "dark_cache_after": [
+    {
+      "bases": 2097152,
+      "bytes": 218103816,
+      "name": "dark_pip_base_21_30000"
+    }
+  ],
+  "dark_cache_before": [
+    {
+      "bases": 2097152,
+      "bytes": 218103816,
+      "name": "dark_pip_base_21_30000"
+    }
+  ],
+  "dark_chunks": 256,
+  "dark_required_bases": 2097152,
+  "end_to_end_seconds": 4431.186821913,
+  "epsilon": 9.094947017729282e-13,
+  "forward_seconds": 550.537861194,
+  "input_tokens": 64,
+  "layers": 16,
+  "measurement_schema_version": 2,
+  "memory_scope": "whole process: prover, verifier, forward, and serialization",
+  "messages": 190,
+  "peak_rss_kib": 222024280,
+  "proof_size_bytes": 198303242,
+  "proof_size_excluding_public_bytes": 176688884,
+  "proof_wall_seconds": 3257.312568997,
+  "protocol": "Spain interactive commitment/sum-check/DARK",
+  "prover_circuit_setup_seconds": 353.171727714,
+  "prover_claim_seconds": 0.016808762,
+  "prover_message_bytes": 198303242,
+  "prover_protocol_seconds": 2842.8317294580006,
+  "prover_seconds": 3747.3302051780006,
+  "prover_serialization_seconds": 0.7720731809999997,
+  "prover_state_setup_seconds": 4.869e-6,
+  "prover_statistics": "EvaluationResult {\n    model_name: \"\",\n    total_protocol_time: 3257.299780308s,\n    batch_size: 1,\n    num_constraints: 0,\n    proof_size: 0,\n    total_prover_time: 2842.718333514s,\n    total_prover_actor_time: 0ns,\n    total_verifier_time: 0ns,\n    total_verifier_actor_time: 0ns,\n    prover_preprocessing_time: 99.920236ms,\n    prover_compute_witness: 2.637431567s,\n    prover_compute_square_error_time: 44.787963597s,\n    prover_prepare_outer_sc_time: 55.824857067s,\n    prover_run_outer_sc_time: 38.939211987s,\n    prover_prepare_inner_sc_time: 58.073162089s,\n    prover_run_inner_sc_time: 22.099244783s,\n    prover_poly_commit_time: 1723.643756023s,\n    prover_poly_eval_time: 540.991787076s,\n    prover_misc_time: 355.720919325s,\n    prover_serialization_time: 0ns,\n    prover_bytes_sent: 0,\n    verifier_setup_time: 0ns,\n    verifier_epsilon_check_time: 0ns,\n    verifier_sample_time: 0ns,\n    verifier_run_outer_sc_time: 0ns,\n    verifier_run_inner_sc_time: 0ns,\n    verifier_poly_eval_time: 0ns,\n    verifier_spark_time: 0ns,\n    verifier_claim_interpolate_time: 0ns,\n    verifier_smart_eval_time: 0ns,\n    verifier_misc_time: 0ns,\n    verifier_serialization_time: 0ns,\n    verifier_bytes_sent: 0,\n}",
+  "scale_bits": 75,
+  "scope": "all decoder layers, final RMSNorm, full-vocabulary last-position logits",
+  "timing_scope": "party active wall time including assigned frontend work and outgoing JSON serialization; excludes shared model loading, manifest hashing, artifact I/O, network and deserialization",
+  "verified": true,
+  "verifier_circuit_setup_seconds": 264.000614753,
+  "verifier_layout_seconds": 0.000661922,
+  "verifier_message_bytes": 11715220,
+  "verifier_protocol_seconds": 413.25441534799995,
+  "verifier_seconds": 677.278341097,
+  "verifier_serialization_seconds": 0.02226153299999999,
+  "verifier_state_setup_seconds": 0.000387541,
+  "verifier_statistics": "EvaluationResult {\n    model_name: \"\",\n    total_protocol_time: 3257.299780588s,\n    batch_size: 1,\n    num_constraints: 0,\n    proof_size: 0,\n    total_prover_time: 0ns,\n    total_prover_actor_time: 0ns,\n    total_verifier_time: 412.562164489s,\n    total_verifier_actor_time: 0ns,\n    prover_preprocessing_time: 0ns,\n    prover_compute_witness: 0ns,\n    prover_compute_square_error_time: 0ns,\n    prover_prepare_outer_sc_time: 0ns,\n    prover_run_outer_sc_time: 0ns,\n    prover_prepare_inner_sc_time: 0ns,\n    prover_run_inner_sc_time: 0ns,\n    prover_poly_commit_time: 0ns,\n    prover_poly_eval_time: 0ns,\n    prover_misc_time: 0ns,\n    prover_serialization_time: 0ns,\n    prover_bytes_sent: 0,\n    verifier_setup_time: 686.736811ms,\n    verifier_epsilon_check_time: 54.321µs,\n    verifier_sample_time: 289.369µs,\n    verifier_run_outer_sc_time: 857.284µs,\n    verifier_run_inner_sc_time: 296.412µs,\n    verifier_poly_eval_time: 228.571257ms,\n    verifier_spark_time: 0ns,\n    verifier_claim_interpolate_time: 15.771466594s,\n    verifier_smart_eval_time: 115.133880827s,\n    verifier_misc_time: 281.426748425s,\n    verifier_serialization_time: 0ns,\n    verifier_bytes_sent: 0,\n}",
+  "vocabulary": 128256
+}

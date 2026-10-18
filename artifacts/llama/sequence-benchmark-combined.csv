@@ -1,0 +1,7 @@
+seq_len,status,verified,peak_rss_gib,prover_seconds,verifier_seconds,proof_size_mib,proof_size_excluding_public_mib,elapsed_seconds,threads,memory_budget_gib,max_rss_gib,loaded_cache_bases,source_summary,reason
+1,verified,True,5.660163879394531,71.47968704599998,21.179854087,19.982803344726562,3.164735794067383,96.2078525149991,8,200,200.0,1048576,artifacts/llama/sequence-benchmark/summary.json,
+2,verified,True,8.470226287841797,125.03696773999997,29.049572122000008,21.91616725921631,5.076229095458984,157.84353753199684,8,200,200.0,1048576,artifacts/llama/sequence-benchmark/summary.json,
+8,verified,True,26.928234100341797,453.007553063,83.32723929399997,33.45944881439209,16.25391387939453,541.575540787002,8,200,200.0,1048576,artifacts/llama/sequence-benchmark/summary.json,
+32,verified,True,106.23531723022461,1847.9834911130004,319.78578076300005,89.80189895629883,71.11099338531494,2180.2755383409967,8,200,200.0,1048576,artifacts/llama/sequence-benchmark/summary.json,
+64,verified,True,211.73931884765625,3747.3302051780006,677.278341097,189.11670875549316,168.5036506652832,4446.876627379999,8,225,225.0,2097152,artifacts/llama/sequence-benchmark-extended/summary.json,
+128,resource_limit,False,,,,,,,8,225,225.0,,artifacts/llama/sequence-benchmark-extended/summary.json,Error: estimated working memory exceeds budget: 446899900840 bytes

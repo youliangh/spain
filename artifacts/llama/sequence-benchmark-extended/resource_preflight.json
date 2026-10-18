@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-10-18T17:37:11.025231+00:00",
+  "method": "Read-only structural arithmetic from existing layout/compile code, validated against all four completed benchmark metadata files. No model execution, proof, large cache construction, or heavy test was launched by this preflight.",
+  "status": "planning_estimates_not_measured_64_or_128_results",
+  "model": "Llama-3.2-1B",
+  "layers": 16,
+  "vocabulary": 128256,
+  "threads": 8,
+  "scale_bits": 75,
+  "epsilon": 9.094947017729282e-13,
+  "dark_chunks": 256,
+  "dark_q_bits": 30000,
+  "units": {
+    "GiB": 1073741824,
+    "field_element_bytes": 16,
+    "RSA_group_payload_bytes": 96
+  },
+  "structural_formulas": {
+    "primary": "6656*s^2 + 4133475*s + 128256",
+    "constraints": "6912*s^2 + 3758659*s + 161026",
+    "secondary": "512*s^2 + 33392*s + 32769",
+    "public": "128289 + 2049*s",
+    "random": "537856 + 512*s",
+    "activation": "1024*s^2 + 847872*s + 130304",
+    "nonlinear": "512*s^2 + 131072*s",
+    "native_peak_bytes": "2471645608 + 256*activation + 16384*nonlinear",
+    "native_artifact_bytes": "32*activation + 1024*nonlinear",
+    "required_dark_bases": "next_power_of_two(primary)/256"
+  },
+  "formula_validation": [
+    {
+      "sequence_length": 1,
+      "source_directory": "artifacts/llama/sequence-benchmark/length-0001/repeat-001/attempt-0001",
+      "all_nine_count_checks_match": true
+    },
+    {
+      "sequence_length": 2,
+      "source_directory": "artifacts/llama/sequence-benchmark/length-0002/repeat-001/attempt-0001",
+      "all_nine_count_checks_match": true
+    },
+    {
+      "sequence_length": 8,
+      "source_directory": "artifacts/llama/sequence-benchmark/length-0008/repeat-001/attempt-0001",
+      "all_nine_count_checks_match": true
+    },
+    {
+      "sequence_length": 32,
+      "source_directory": "artifacts/llama/sequence-benchmark/length-0032/repeat-001/attempt-0001",
+      "all_nine_count_checks_match": true
+    }
+  ],
+  "measured_reference_length_32": {
+    "proof_report": "artifacts/llama/sequence-benchmark/length-0032/repeat-001/attempt-0001/proof_report.json",
+    "proof_report_sha256": "cb8b1ca26e2bb8075c1590474820e3a7d4e9ee078c70881d088739336d86d270",
+    "verified": true,
+    "peak_rss_kib": 111395804,
+    "peak_rss_gib": 106.23531723022461,
+    "native_estimated_peak_gib": 81.05171624571085,
+    "actual_to_native_estimate_ratio": 1.3107102742669738,
+    "structural_counts": {
+      "sequence_length": 32,
+      "primary_witness_values": 139215200,
+      "constraints": 127516002,
+      "public_values": 193857,
+      "random_values": 554240,
+      "secondary_witness_values": 1625601,
+      "total_witness_values": 141588898,
+      "padded_primary_values": 268435456,
+      "padded_constraint_rows": 134217728,
+      "dark_total_rounds": 28,
+      "outer_sumcheck_rounds": 27,
+      "inner_sumcheck_rounds": 30,
+      "dark_chunks": 256,
+      "required_dark_bases": 1048576,
+      "activation_values": 28310784,
+      "nonlinear_values": 4718592,
+      "native_estimated_peak_bytes": 87028617640,
+      "native_estimated_peak_gib": 81.05171624571085,
+      "native_estimated_artifact_bytes": 5737783296,
+      "native_estimated_artifact_gib": 5.343727111816406,
+      "primary_witness_file_bytes": 2227443200,
+      "native_preflight_accepts_200_gib": true,
+      "native_preflight_accepts_225_gib": true,
+      "padding_allocations": {
+        "verifier_row_evaluation_table_bytes": 2147483648,
+        "verifier_full_column_evaluation_table_bytes": 17179869184,
+        "verifier_compressed_column_evaluation_table_bytes": 2265422368,
+        "simultaneous_verifier_evaluation_tables_bytes": 21592775200,
+        "simultaneous_verifier_evaluation_tables_gib": 20.109838992357254,
+        "one_padded_field_array_bytes": 4294967296,
+        "dark_base_vector_payload_bytes": 100663296,
+        "dark_base_cache_bincode_bytes": 109051912
+      }
+    }
+  },
+  "host_snapshot": {
+    "mem_total_bytes": 265694408704,
+    "mem_total_gib": 247.44720077514648,
+    "mem_available_bytes": 258473304064,
+    "mem_available_gib": 240.7220230102539,
+    "mem_available_minus_20_gib": 220.7220230102539
+  },
+  "intended_guard_configuration": {
+    "native_memory_budget_gib": 225,
+    "maximum_process_rss_gib": 225,
+    "minimum_host_mem_available_gib": 20,
+    "warning": "The independent MemAvailable guard can terminate below 225 GiB RSS; other resident processes, mapped file pages and reclaimable cache mean these quantities are not interchangeable."
+  },
+  "allocation_notes": [
+    "spain::verifier::smart_r1cs_eval holds the row table while build_compressed_eval_tbl temporarily holds the complete padded column table and its compressed output. Payload counts here are exact; allocator and enclosing states are additional.",
+    "Three witness ranges remap into a 4*next_power_of_two(primary) column domain. The full column table is 16/32/64 GiB for sequence lengths 32/64/128.",
+    "Matrix::trunc_kronecker_prod_split materializes full padded row tables before copying the real range; old/new vectors and the BigVec copy can overlap.",
+    "DARK constructs padded Vec<rug::Integer> witnesses and clones during commit/folding; integer heap limbs, other live matrices and allocator reuse make exact whole-process peak prediction impossible from counts alone.",
+    "Native memory estimate excludes explicit padding costs and underpredicted measured length-32 peak by approximately 31 percent. Do not present extrapolations as measurements.",
+    "The native preflight check occurs before forward and before writing resource_estimate.json; this artifact preserves the rejected length-128 estimate without executing it."
+  ],
+  "source_paths": [
+    "llama/src/model.rs::LlamaModel::layout",
+    "llama/src/circuit.rs::compile",
+    "llama/src/circuit.rs::Builder",
+    "llama/src/main.rs::run",
+    "spain/src/verifier.rs::smart_r1cs_eval",
+    "spain/src/verifier.rs::build_compressed_eval_tbl",
+    "parse/src/matmont.rs::trunc_kronecker_prod_split",
+    "parse/src/generalized.rs::extract_rows_to_mle",
+    "dark/src/public.rs::build_pippenger_bases"
+  ],
+  "cases": [
+    {
+      "sequence_length": 64,
+      "primary_witness_values": 291933632,
+      "constraints": 269026754,
+      "public_values": 259425,
+      "random_values": 570624,
+      "secondary_witness_values": 4267009,
+      "total_witness_values": 297030690,
+      "padded_primary_values": 536870912,
+      "padded_constraint_rows": 536870912,
+      "dark_total_rounds": 29,
+      "outer_sumcheck_rounds": 29,
+      "inner_sumcheck_rounds": 31,
+      "dark_chunks": 256,
+      "required_dark_bases": 2097152,
+      "activation_values": 58588416,
+      "nonlinear_values": 10485760,
+      "native_estimated_peak_bytes": 189268971944,
+      "native_estimated_peak_gib": 176.27046624571085,
+      "native_estimated_artifact_bytes": 12612247552,
+      "native_estimated_artifact_gib": 11.746070861816406,
+      "primary_witness_file_bytes": 4670938112,
+      "native_preflight_accepts_200_gib": true,
+      "native_preflight_accepts_225_gib": true,
+      "padding_allocations": {
+        "verifier_row_evaluation_table_bytes": 8589934592,
+        "verifier_full_column_evaluation_table_bytes": 34359738368,
+        "verifier_compressed_column_evaluation_table_bytes": 4752491040,
+        "simultaneous_verifier_evaluation_tables_bytes": 47702164000,
+        "simultaneous_verifier_evaluation_tables_gib": 44.42610219120979,
+        "one_padded_field_array_bytes": 8589934592,
+        "dark_base_vector_payload_bytes": 201326592,
+        "dark_base_cache_bincode_bytes": 218103816
+      },
+      "execution_status": "not_executed_by_this_preflight",
+      "memory_extrapolations_from_measured_length_32_not_measurements": {
+        "primary_count_ratio_gib": 222.77497001542685,
+        "constraint_count_ratio_gib": 224.12985120571454,
+        "native_estimate_ratio_gib": 231.039511158083
+      },
+      "assessment": "Borderline on this host. Native preflight accepts 200/225 GiB but previous native estimates underpredicted actual peaks. A supervised attempt with 225 GiB RSS cap and independent 20 GiB MemAvailable minimum can terminate at the resource guard; completion is not guaranteed.",
+      "padding_note": "Constraints exceed 2^28 by 591298, so the padded row domain jumps from length-32 2^27 to 2^29; the verifier row table grows from 2 GiB to 8 GiB. The full column table grows from 16 GiB to 32 GiB. These allocations are not an independent addition to the extrapolated whole-process peak."
+    },
+    {
+      "sequence_length": 128,
+      "primary_witness_values": 638264960,
+      "constraints": 594515586,
+      "public_values": 390561,
+      "random_values": 603392,
+      "secondary_witness_values": 12695553,
+      "total_witness_values": 651954466,
+      "padded_primary_values": 1073741824,
+      "padded_constraint_rows": 1073741824,
+      "dark_total_rounds": 30,
+      "outer_sumcheck_rounds": 30,
+      "inner_sumcheck_rounds": 32,
+      "dark_chunks": 256,
+      "required_dark_bases": 4194304,
+      "activation_values": 125435136,
+      "nonlinear_values": 25165824,
+      "native_estimated_peak_bytes": 446899900840,
+      "native_estimated_peak_gib": 416.20796624571085,
+      "native_estimated_artifact_bytes": 29783728128,
+      "native_estimated_artifact_gib": 27.738258361816406,
+      "primary_witness_file_bytes": 10212239360,
+      "native_preflight_accepts_200_gib": false,
+      "native_preflight_accepts_225_gib": false,
+      "padding_allocations": {
+        "verifier_row_evaluation_table_bytes": 17179869184,
+        "verifier_full_column_evaluation_table_bytes": 68719476736,
+        "verifier_compressed_column_evaluation_table_bytes": 10431271456,
+        "simultaneous_verifier_evaluation_tables_bytes": 96330617376,
+        "simultaneous_verifier_evaluation_tables_gib": 89.71487858891487,
+        "one_padded_field_array_bytes": 17179869184,
+        "dark_base_vector_payload_bytes": 402653184,
+        "dark_base_cache_bincode_bytes": 436207624
+      },
+      "execution_status": "not_executed_by_this_preflight",
+      "memory_extrapolations_from_measured_length_32_not_measurements": {
+        "primary_count_ratio_gib": 487.06089925910834,
+        "constraint_count_ratio_gib": 495.29902825076715,
+        "native_estimate_ratio_gib": 545.528057590015
+      },
+      "assessment": "Native preflight necessarily rejects under 200 or 225 GiB before forward execution: the static estimate is 416.207966 GiB, greater than total physical RAM. Do not bypass the guard. A failed preflight is a resource rejection, not a verified proof benchmark."
+    }
+  ]
+}

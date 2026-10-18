@@ -147,3 +147,12 @@ not establish that acceptance.
 
 The completed local-checkpoint results, generated text examples, full proof
 measurements and test coverage are recorded in [VALIDATION.md](VALIDATION.md).
+
+Sequence-length performance measurements and reproducible commands are described
+in [BENCHMARKS.md](BENCHMARKS.md#consolidated-results), with a consolidated table
+for input lengths 1, 2, 8, 32, 64, and 128. The five tested lengths up to 64 verified
+successfully; length 128 was rejected by the native memory preflight. The schema-2
+native report records separate
+prover/verifier active times, whole-process peak RSS, and both full prover-message
+size and proof size with public openings excluded. The benchmark runner validates
+these counters against the saved transcript and writes JSON/CSV summaries.

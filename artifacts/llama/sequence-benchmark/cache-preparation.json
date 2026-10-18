@@ -1,0 +1,21 @@
+{
+  "cache_after": [
+    {
+      "bases": 1048576,
+      "bytes": 109051912,
+      "name": "dark_pip_base_20_30000"
+    }
+  ],
+  "cache_before": [
+    {
+      "bases": 262144,
+      "bytes": 27262984,
+      "name": "dark_pip_base_18_30000"
+    }
+  ],
+  "dark_chunks": 256,
+  "loaded_bases": 1048576,
+  "required_bases": 1048576,
+  "seconds": 162.669332014,
+  "witness_log2": 28
+}
