@@ -10,3 +10,7 @@ dark_*
 /**/lp-zkif
 prover_cost.json
 verifier_cost.json
+.cache/
+artifacts/
+__pycache__/
+*.pyc

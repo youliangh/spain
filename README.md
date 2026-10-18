@@ -118,6 +118,10 @@ Depending on your machine, you may need to increase the number of samples/iterat
 Spain shows at least an order of magnitude improvement in prover time and verifier time over baselines with the exception of zkGPT and ZKLP's verifier. Spain improves over baselines in constraint counts by 32x to 4 orders of magnitude. Additionally, Spain's verifier work grows less than linearly in batch size and verifier setup costs range from negligible to 5x the work to check a single instance. Spain's prover incurs a 3-5 order of magnitude overhead over native execution. 
 
 # Extensions
+The native Llama-3.2 frontend, local-weight inference, high-precision witness
+generation, and complete forward-pass proof commands are documented in
+[`llama/README.md`](llama/README.md).
+
 Feel free to experiment with other ONNX files, support for ONNX is relatively limited (although we will welcome open source extensions in the future). We also provide a small gadget library in ```examples``` that can be used to prove execution of numerical programs in Rust, which can be used for experimentation (there is currently no documentation, but we can provide some if there is interest). 
 
 # Directory structure

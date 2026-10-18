@@ -29,6 +29,10 @@ use crate::{
 pub enum SpainMessage<T = i128> {
     Setup(PublicParams),
     ErrorClaim(String),
+    BoundErrorClaim {
+        squared_error: String,
+        secondary_openings: Vec<ZRangeOpening<T>>,
+    },
     RequestCommitment,
     Commitment(ChunkedComm),
     SampleMont {
@@ -162,7 +166,7 @@ where
                 self.phase = ProverPhase::WaitingMont;
                 self.timer.prover(ProverTimerPhase::Misc, || {
                     self.state.set_randomness(randomness.clone());
-                    self.state.inject_randomness();
+                    self.state.refresh_matrices_after_randomness();
                 });
                 self.timer.prover(ProverTimerPhase::ComputeWitness, || {
                     self.state.compute_full_witness();
@@ -172,7 +176,15 @@ where
                     .prover(ProverTimerPhase::ComputeSquaredError, || {
                         self.state.compute_squared_error()
                     });
-                SpainMessage::ErrorClaim(squared_error.to_string())
+                let secondary_openings = self.state.secondary_witness_openings();
+                if secondary_openings.is_empty() {
+                    SpainMessage::ErrorClaim(squared_error.to_string())
+                } else {
+                    SpainMessage::BoundErrorClaim {
+                        squared_error: squared_error.to_string(),
+                        secondary_openings,
+                    }
+                }
             }
             (ProverPhase::WaitingMont, SpainMessage::SampleMont { small_modulus }) => {
                 self.timer.prover(ProverTimerPhase::PrepareOuterSc, || {
@@ -351,13 +363,34 @@ where
                 let randomness = self.timer.verifier(VerifierTimerPhase::Misc, || {
                     self.state.set_commit(comm.clone());
                     let randomness = self.state.sample_normal_randomness();
-                    self.state.inject_randomness();
+                    self.state.refresh_matrices_after_randomness();
                     randomness
                 });
                 Some(SpainMessage::Randomness(randomness))
             }
             (VerifierPhase::WaitingErrorClaim, SpainMessage::ErrorClaim(squared_error)) => {
                 self.phase = VerifierPhase::Outer;
+                let squared_error =
+                    i256::I512::from_str(squared_error).expect("invalid squared error encoding");
+                self.timer.verifier(VerifierTimerPhase::EpsilonCheck, || {
+                    self.state.epsilon_check(&squared_error)
+                });
+                let mont = self
+                    .timer
+                    .verifier(VerifierTimerPhase::Sample, || self.state.sample_mont());
+                Some(SpainMessage::SampleMont {
+                    small_modulus: mont.modulus(),
+                })
+            }
+            (
+                VerifierPhase::WaitingErrorClaim,
+                SpainMessage::BoundErrorClaim {
+                    squared_error,
+                    secondary_openings,
+                },
+            ) => {
+                self.phase = VerifierPhase::Outer;
+                self.state.bind_secondary_openings(secondary_openings);
                 let squared_error =
                     i256::I512::from_str(squared_error).expect("invalid squared error encoding");
                 self.timer.verifier(VerifierTimerPhase::EpsilonCheck, || {

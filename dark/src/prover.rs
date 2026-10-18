@@ -1,10 +1,10 @@
 use ff::ops_128::M128;
 use ff::poly::{int::MLE as IntMLE, mont::MLE};
 use rug::Complete;
-use rug::{ops::Pow, Integer};
+use rug::{Integer, ops::Pow};
 use serde::{Deserialize, Serialize};
 
-use crate::bigrsa::{pippenger_exp, RSAGroup};
+use crate::bigrsa::{RSAGroup, pippenger_exp};
 use crate::public::PublicParams;
 use crate::verifier::RoundChallenge;
 
@@ -49,21 +49,22 @@ pub fn commit_chunked_pippenger(poly: IntMLE, public: &PublicParams) -> ChunkedC
         "number of chunks must be a power of two"
     );
     assert!(
-            len > num_chunks,
-            "there cannot be more chunks than MLE evaluations, got {num_chunks} chunks for {len} evaluations"
-        );
+        len > num_chunks,
+        "there cannot be more chunks than MLE evaluations, got {num_chunks} chunks for {len} evaluations"
+    );
 
     let chunk_size = len / num_chunks;
 
     // Ensure we have enough precomputed bases for a single chunk:
     assert!(
-            public.pippenger_bases.len() >= chunk_size,
-            "pippenger_bases not precomputed for chunk_size={chunk_size}; \
+        public.pippenger_bases.len() >= chunk_size,
+        "pippenger_bases not precomputed for chunk_size={chunk_size}; \
              call build_pippenger_bases(log2(chunk_size)) or larger before commit_chunked_pippenger"
-        );
+    );
 
     let mut comms = Vec::with_capacity(num_chunks);
     let shift = public.int_shift_base();
+    let min_coefficient = -shift.clone();
     let pad_comm = *public
         .initial_pad_comm
         .as_ref()
@@ -74,6 +75,10 @@ pub fn commit_chunked_pippenger(poly: IntMLE, public: &PublicParams) -> ChunkedC
         let padded_chunk: Vec<Integer> = evals_chunk
             .iter()
             .map(|v| {
+                assert!(
+                    v >= &min_coefficient && v <= &shift,
+                    "DARK coefficient exceeds the configured signed precision"
+                );
                 let res = (v + &shift).complete();
                 assert!(
                     !res.is_negative(),
@@ -99,9 +104,9 @@ pub fn commit_chunked_pippenger(poly: IntMLE, public: &PublicParams) -> ChunkedC
 pub fn commit(poly: IntMLE, public: &PublicParams) -> RSAGroup {
     let len = poly.evals.len();
     assert!(
-            public.pippenger_bases.len() >= len,
-            "pippenger_bases not precomputed for enough terms; call build_pippenger_bases(log2({len})) first"
-        );
+        public.pippenger_bases.len() >= len,
+        "pippenger_bases not precomputed for enough terms; call build_pippenger_bases(log2({len})) first"
+    );
     pippenger_exp(&public.mont, &public.pippenger_bases[..len], &poly.evals)
 }
 

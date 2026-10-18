@@ -1425,6 +1425,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "llama-spain"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "i256",
+ "memmap2",
+ "model",
+ "parse",
+ "protocol",
+ "rayon",
+ "rug",
+ "serde",
+ "serde_json",
+ "sha2",
+ "spain",
+ "stream",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"

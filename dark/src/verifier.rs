@@ -1,12 +1,12 @@
 use ff::ops_128::M128;
 use rand::Rng;
 use rug::Complete;
-use rug::{ops::Pow, Integer};
+use rug::{Integer, ops::Pow};
 use serde::{Deserialize, Serialize};
 
-use crate::bigrsa::{generate_rsa_group, RSAGroup};
+use crate::bigrsa::{RSAGroup, generate_rsa_group};
 use crate::prover::{ChunkedComm, FinalClaim, RoundClaim};
-use crate::public::{PublicParams, MOD_BITS};
+use crate::public::{MOD_BITS, PublicParams};
 use crate::{mod_pow_u64, precompute_series_mod, sample_alpha};
 
 #[derive(Clone, Debug, Default)]
@@ -49,6 +49,27 @@ impl VerifierState {
 
     // Verifier initiates a round, sampling claims for the prover
     pub fn start_round<R: Rng>(&mut self, public: &PublicParams, rng: &mut R) -> RoundChallenge {
+        assert!(
+            self.round < public.total_rounds,
+            "DARK proof already complete"
+        );
+        assert_eq!(
+            self.eval_point.len(),
+            public.total_rounds,
+            "DARK evaluation point length mismatch"
+        );
+        if self.round == 0 {
+            assert_eq!(
+                self.chunked_comm.comms.len(),
+                public.num_chunks,
+                "DARK commitment chunk count mismatch"
+            );
+            assert_eq!(
+                self.chunked_comm.chunk_size,
+                public.chunk_size(),
+                "DARK commitment chunk size mismatch"
+            );
+        }
         self.round += 1;
         self.sample_round_alpha(public, rng);
         RoundChallenge {
@@ -59,6 +80,15 @@ impl VerifierState {
 
     // Validates prover claims for the current round and updates internal state
     pub fn verify_round(&mut self, round_claim: &RoundClaim, public: &PublicParams) {
+        assert!(
+            (1..=public.total_rounds).contains(&self.round),
+            "DARK round out of range"
+        );
+        assert_eq!(
+            round_claim.final_claim.is_some(),
+            self.round == public.total_rounds,
+            "DARK final claim must appear only on the final round"
+        );
         let verifier_in_head_round = self.round < public.num_verifier_in_head_rounds();
 
         // Derive or fetch commitment claims
@@ -335,9 +365,14 @@ impl VerifierState {
         final_constant_int: &Integer,
         public: &PublicParams,
     ) {
+        assert_eq!(self.round, public.total_rounds, "DARK proof is incomplete");
         let mut exp = final_constant_int.clone() % &self.car;
-        let upper_bound = (public.small_mont.modulus() - 1)
-            * Integer::from(2).pow((public.total_rounds as u32) * 128);
+        // Each fold is (1-alpha)L + alpha R with 0 <= alpha < p.
+        // Starting with signed `precision`-bit coefficients, its absolute
+        // value is at most B * (2p-3)^rounds. Unlike the old field-only bound,
+        // this also covers the supported 256/512-bit integer witnesses.
+        let growth: Integer = Integer::from(public.small_mont.modulus()) * 2 - 3;
+        let upper_bound = public.int_shift_base() * growth.pow(public.total_rounds as u32);
 
         // Ensure that final coefficient is positive
         if exp.is_negative() {
@@ -346,9 +381,18 @@ impl VerifierState {
         let derived_comm = public.mont.fast_exp(&public.rsa_gen, &exp, &self.car);
 
         // Check that the final constant polynomial is within bounds
-        if final_constant_int.clone().abs() > upper_bound {
-            eprintln!("WARNING: Final constant polynomial is out of bounds. This is expected for Otti-FE, as we do not use Otti's field.");
-        }
+        assert!(
+            final_constant_int.clone().abs() <= upper_bound,
+            "DARK final constant polynomial is out of bounds"
+        );
+
+        // The RSA opening and the field evaluation must be the same value.
+        // Checking each against a separately supplied claim leaves them unbound.
+        assert_eq!(
+            public.small_mont.from_bigint(final_constant_int.clone()),
+            *final_constant,
+            "DARK integer opening does not reduce to the field opening"
+        );
 
         // Check that the final constant polynomial is the expected evaluation
         assert_eq!(

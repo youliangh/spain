@@ -15,6 +15,22 @@ where
     P: HighPrecision,
     T: HighPrecisionInt,
 {
+    /// Rebuild the matrices after the primary witness has been committed and the
+    /// verifier has sampled its challenges. The default keeps the existing ONNX
+    /// random-coefficient injection path. Matrix dimensions must remain fixed.
+    fn requires_challenge_matrices(&self) -> bool {
+        false
+    }
+
+    /// The verifier's statement, fixed before any protocol challenge. Values are
+    /// scaled integers in row-major order (public row, batch column), including
+    /// the constant-one row and excluding the independently checked random rows.
+    /// Legacy benchmark executors may omit the statement; application executors
+    /// must return Some to bind a proof to their claimed inputs and outputs.
+    fn expected_public_values(&self, _scale_factor: P, _batch_size: usize) -> Option<Vec<T>> {
+        None
+    }
+
     // TODO: add input param
     fn get_matrices(
         &self,

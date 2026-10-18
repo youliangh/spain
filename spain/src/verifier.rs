@@ -96,6 +96,8 @@ pub struct VerifierState<
     pub r1cs_matrices_int: Option<R1CSMatrices<T>>,
     pub mont: Option<FieldMont>,
     pub wit_exec: E,
+    expected_public_values: Option<Vec<T>>,
+    bound_secondary_openings: Option<Vec<ZRangeOpening<T>>>,
     pub error: Option<I512>,
     pub num_chunks: usize,
     pub metadata: Metadata,
@@ -139,11 +141,37 @@ where
         wit_exec: E,
         metadata: Metadata,
     ) -> Self {
+        assert!(
+            max_epsilon.is_finite() && max_epsilon >= 0.0,
+            "maximum epsilon must be finite and nonnegative"
+        );
+        assert!(batch_size > 0, "batch size must be positive");
         let scale_factor: P = if spartan_poly {
             P::from_i128(1).unwrap()
         } else {
             scale_factor(scale_factor_bits)
         };
+        let expected_public_values =
+            wit_exec.expected_public_values(scale_factor.clone(), batch_size);
+        if let Some(values) = &expected_public_values {
+            assert_eq!(
+                values.len(),
+                metadata
+                    .num_public_values
+                    .checked_mul(batch_size)
+                    .expect("public statement size overflow"),
+                "public statement size mismatch"
+            );
+            assert!(
+                metadata.num_public_values > 0,
+                "public statement is missing constant one"
+            );
+            let one = T::from_hp(scale_factor.clone());
+            assert!(
+                values[..batch_size].iter().all(|value| *value == one),
+                "public statement must start with scaled constant one"
+            );
+        }
 
         let mut ret = VerifierState {
             max_epsilon,
@@ -172,6 +200,8 @@ where
             spartan_poly,
             metadata,
             wit_exec,
+            expected_public_values,
+            bound_secondary_openings: None,
             _phantom_p: std::marker::PhantomData::<P>,
             _phantom_t: std::marker::PhantomData::<T>,
         };
@@ -196,6 +226,33 @@ where
         self.r1cs_matrices_int = Some(matrices);
     }
 
+    pub fn refresh_matrices_after_randomness(&mut self) {
+        if self.wit_exec.requires_challenge_matrices() {
+            let old = self
+                .r1cs_matrices_int
+                .as_ref()
+                .expect("matrices not initialized");
+            let shapes = [
+                (old.a.height(), old.a.width()),
+                (old.b.height(), old.b.width()),
+                (old.c.height(), old.c.width()),
+            ];
+            self.import_r1cs_matrices();
+            let new = self.r1cs_matrices_int.as_ref().unwrap();
+            assert_eq!(
+                shapes,
+                [
+                    (new.a.height(), new.a.width()),
+                    (new.b.height(), new.b.width()),
+                    (new.c.height(), new.c.width()),
+                ],
+                "challenge-dependent matrices changed dimensions"
+            );
+        } else {
+            self.inject_randomness();
+        }
+    }
+
     pub fn epsilon_check(&mut self, squared_error: &I512) {
         if self.spartan_poly {
             self.error = Some(I512::from(0));
@@ -211,6 +268,10 @@ where
     }
 
     pub fn sample_mont(&mut self) -> FieldMont {
+        assert!(
+            self.metadata.get_ranges().len() <= 2 || self.bound_secondary_openings.is_some(),
+            "secondary witness must be fixed before sampling the field modulus"
+        );
         let modulus = prime_128::rand_prime(&mut rand::rng());
         let mont = FieldMont::new(modulus);
         self.scale_mont = Some(get_scale_mont(&mont, &self.scale_factor));
@@ -257,11 +318,31 @@ where
         };
 
         self.outer_state = Some(SCVerifierState::new(
-            self.r1cs_matrices_int.as_ref().unwrap().a.height(),
+            self.outer_num_vars(),
             if self.spartan_poly { 3 } else { 4 },
             outer_claim,
             mont,
         ));
+    }
+
+    fn outer_num_vars(&self) -> usize {
+        let rows = self.num_constraints().next_power_of_two();
+        let cols = self.batch_size.next_power_of_two();
+        (rows * cols).max(2).ilog2() as usize
+    }
+
+    fn inner_num_vars(&self) -> usize {
+        // Match Matrix::to_mle's equal-stride range layout and even padding.
+        let ranges = self.metadata.get_ranges();
+        let stride = ranges
+            .iter()
+            .map(|range| range.len())
+            .max()
+            .unwrap()
+            .next_power_of_two();
+        let end = (ranges.len() - 1) * stride + ranges.last().unwrap().len();
+        let padded_end = end + end % 2;
+        padded_end.next_power_of_two().ilog2() as usize
     }
 
     pub fn outer_sc_verify(&mut self, p: &mut Vec<FieldElem>) -> Result<FieldElem, String> {
@@ -276,11 +357,18 @@ where
         p: &[FieldElem],
         evals: &[FieldElem],
     ) -> Result<(), String> {
+        let expected_evals = if self.spartan_poly { 4 } else { 3 };
+        if evals.len() != expected_evals {
+            return Err("incorrect outer final evaluation count".to_string());
+        }
         let r = self
             .outer_state
             .as_ref()
             .expect("Outer sum-check state not initialized, call prepare_outer_sc")
             .challenges();
+        if r.len() != self.outer_num_vars() {
+            return Err("outer sum-check is incomplete".to_string());
+        }
         if self.spartan_poly {
             let tau = deterministic_tau(&self.mont.unwrap(), r.len());
             // Cache claims for the inner sum-check (exclude eq claim)
@@ -295,6 +383,11 @@ where
     }
 
     pub fn prepare_inner_sc(&mut self, num_vars: usize) {
+        assert_eq!(
+            num_vars,
+            self.inner_num_vars(),
+            "inner sum-check dimension mismatch"
+        );
         let mont = self.mont();
         let mut claim = self.outer_claims[0];
         claim = mont.add(claim, mont.mul(self.r1.unwrap(), self.outer_claims[1]));
@@ -314,6 +407,19 @@ where
         claim: &[FieldElem],
         evals: &[FieldElem],
     ) -> Result<(), String> {
+        if evals.len() != 2 {
+            return Err("incorrect inner final evaluation count".to_string());
+        }
+        if self
+            .inner_state
+            .as_ref()
+            .expect("inner sum-check state not initialized")
+            .challenges()
+            .len()
+            != self.inner_num_vars()
+        {
+            return Err("inner sum-check is incomplete".to_string());
+        }
         let r = self
             .inner_state
             .as_ref()
@@ -442,6 +548,7 @@ where
     }
 
     pub fn witness_claim_check(&self, z_openings: &[ZRangeOpening<T>]) {
+        self.validate_witness_openings(z_openings);
         let mont = self.mont();
         let scale_den = mont.inv(self.scale_mont.expect("scale mont not set"));
         let has_randomness = self.metadata.num_random_values > 0;
@@ -478,9 +585,123 @@ where
     }
 
     pub fn final_verify(&self, z_openings: &[ZRangeOpening<T>]) {
+        self.validate_witness_openings(z_openings);
         self.matrices_claim_check();
         self.witness_claim_check(z_openings);
         eprintln!("Final verification success!!!");
+    }
+
+    /// Check the public statement and verifier randomness independently of the
+    /// prover's algebraic claim. The statement was captured in `new`, before
+    /// the primary commitment and the challenges.
+    pub fn validate_witness_openings(&self, z_openings: &[ZRangeOpening<T>]) {
+        let ranges = self.metadata.get_ranges();
+        validate_opening_shapes(z_openings, &ranges, self.batch_size);
+        if ranges.len() > 2 {
+            let bound = self
+                .bound_secondary_openings
+                .as_ref()
+                .expect("secondary witness was not fixed before the field modulus");
+            for opening in bound {
+                let final_opening = z_openings
+                    .iter()
+                    .find(|candidate| candidate.range_index == opening.range_index)
+                    .unwrap();
+                for (index, (actual, expected)) in
+                    final_opening.values.iter().zip(&opening.values).enumerate()
+                {
+                    assert_eq!(
+                        actual, expected,
+                        "secondary opening changed after the field modulus: range {}, index {index}",
+                        opening.range_index
+                    );
+                }
+            }
+        }
+        let public = z_openings
+            .iter()
+            .find(|opening| opening.range_index == 0)
+            .expect("missing public opening");
+        let public_len = self
+            .metadata
+            .num_public_values
+            .checked_mul(self.batch_size)
+            .expect("public statement size overflow");
+        if let Some(expected) = &self.expected_public_values {
+            for (index, (actual, expected)) in
+                public.values[..public_len].iter().zip(expected).enumerate()
+            {
+                assert_eq!(
+                    actual, expected,
+                    "public opening does not match the verifier statement at index {index}"
+                );
+            }
+        }
+        if self.metadata.num_random_values > 0 {
+            let randomness = self
+                .randomness
+                .as_ref()
+                .expect("verifier challenges not sampled");
+            assert_eq!(
+                randomness.len(),
+                self.metadata.num_random_values,
+                "incorrect number of verifier challenges"
+            );
+            for (row, value) in randomness.iter().enumerate() {
+                let expected = T::from_hp(value.clone() * self.scale_factor.clone());
+                for col in 0..self.batch_size {
+                    assert_eq!(
+                        public.values[public_len + row * self.batch_size + col],
+                        expected,
+                        "public opening changed verifier challenge {row}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Fix the challenge-dependent witness before q is chosen. Without this
+    /// step a prover could choose secondary values modulo q that make a sum of
+    /// nonzero squared residuals vanish. Spain is not a zero-knowledge protocol;
+    /// these values are also disclosed by the existing final witness opening.
+    pub fn bind_secondary_openings(&mut self, openings: &[ZRangeOpening<T>]) {
+        assert!(
+            self.mont.is_none(),
+            "cannot bind secondary witness after the field modulus"
+        );
+        assert!(
+            self.bound_secondary_openings.is_none(),
+            "secondary witness is already bound"
+        );
+        let ranges = self.metadata.get_ranges();
+        assert!(ranges.len() > 2, "instance has no secondary witness");
+        let mut seen = vec![false; ranges.len()];
+        for opening in openings {
+            let index = opening.range_index;
+            assert!(
+                index >= 2 && index < ranges.len(),
+                "invalid secondary opening range"
+            );
+            assert!(!seen[index], "duplicate secondary opening range {index}");
+            seen[index] = true;
+            assert_eq!(
+                opening.width, self.batch_size,
+                "secondary opening width mismatch"
+            );
+            assert_eq!(
+                opening.values.len(),
+                ranges[index]
+                    .len()
+                    .checked_mul(self.batch_size)
+                    .expect("secondary opening size overflow"),
+                "secondary opening size mismatch"
+            );
+        }
+        assert!(
+            seen[2..].iter().all(|present| *present),
+            "missing secondary opening range"
+        );
+        self.bound_secondary_openings = Some(openings.to_vec());
     }
 
     pub fn sample_normal_randomness(&mut self) -> Vec<u64> {
@@ -686,8 +907,18 @@ pub fn epsilon_check(
     max_epsilon: f64,
     verbose: bool,
 ) {
+    assert!(
+        *squared_error >= I512::from(0),
+        "squared error must be nonnegative"
+    );
+    assert!(
+        max_epsilon.is_finite() && max_epsilon >= 0.0,
+        "maximum epsilon must be finite and nonnegative"
+    );
     let num_dbg = Integer::from_str(&squared_error.to_string()).unwrap();
-    let scale8_bits = 8 * scale_factor_bits;
+    let scale8_bits = scale_factor_bits
+        .checked_mul(8)
+        .expect("scale bit count overflow");
     let scale8 = Integer::from(1) << scale8_bits;
     let denom_dbg = Float::with_val(256, scale8);
     let computed_epsilon = (num_dbg / denom_dbg).sqrt();
@@ -711,8 +942,15 @@ pub fn epsilon_check_rug(
     max_epsilon: f64,
     verbose: bool,
 ) {
+    assert!(*squared_error >= 0, "squared error must be nonnegative");
+    assert!(
+        max_epsilon.is_finite() && max_epsilon >= 0.0,
+        "maximum epsilon must be finite and nonnegative"
+    );
     let num_dbg = Integer::from_str(&squared_error.to_string()).unwrap();
-    let scale8_bits = 8 * scale_factor_bits;
+    let scale8_bits = scale_factor_bits
+        .checked_mul(8)
+        .expect("scale bit count overflow");
     let scale8 = Integer::from(1) << scale8_bits;
     let denom_dbg = Float::with_val(256, scale8);
     let computed_epsilon = (num_dbg / denom_dbg).sqrt();
@@ -932,6 +1170,7 @@ pub fn check_final_claim_from_openings<T: HighPrecisionInt>(
     has_randomness: bool,
     has_secondary_constraints: bool,
 ) {
+    validate_opening_shapes(z_openings, ranges, z_width);
     let r_z_col_tbl = build_eval_tbl(mont, r_z_col);
     let r_col_tbl = if has_randomness {
         build_eval_tbl(mont, &r_col[..r_col.len() - 2])
@@ -1007,4 +1246,41 @@ pub fn check_final_claim_from_openings<T: HighPrecisionInt>(
         z_eval == claims[1],
         "Z matrix evaluation does not match claim"
     );
+}
+
+fn validate_opening_shapes<T>(
+    openings: &[ZRangeOpening<T>],
+    ranges: &[Range<usize>],
+    width: usize,
+) {
+    let mut seen = vec![false; ranges.len()];
+    for opening in openings {
+        let index = opening.range_index;
+        assert!(index < ranges.len(), "opening range index out of bounds");
+        assert_ne!(
+            index, 1,
+            "committed witness must not be supplied as a public opening"
+        );
+        assert!(!seen[index], "duplicate witness opening range {index}");
+        seen[index] = true;
+        assert_eq!(
+            opening.width, width,
+            "opening width mismatch for range {index}"
+        );
+        let expected_len = ranges[index]
+            .len()
+            .checked_mul(width)
+            .expect("opening size overflow");
+        assert_eq!(
+            opening.values.len(),
+            expected_len,
+            "opening value count mismatch for range {index}"
+        );
+    }
+    for (index, present) in seen.iter().enumerate() {
+        assert!(
+            index == 1 || *present,
+            "missing witness opening range {index}"
+        );
+    }
 }

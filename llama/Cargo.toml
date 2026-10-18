@@ -1,0 +1,28 @@
+[package]
+name = "llama-spain"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+memmap2 = "0.9"
+rayon = "1"
+rug = "1.28"
+sha2 = "0.10"
+model = { path = "../model" }
+spain = { path = "../spain" }
+parse = { path = "../parse" }
+stream = { path = "../stream" }
+protocol = { path = "../protocol" }
+i256 = { version = "0.2.2", features = ["i512"] }
+
+[lib]
+name = "llama_spain"
+path = "src/lib.rs"
+
+[[bin]]
+name = "llama-spain"
+path = "src/main.rs"

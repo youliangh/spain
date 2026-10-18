@@ -2,7 +2,7 @@
 resolver = "2"
 
 members = [
-    "ff", "dark", "parse", "iop", "spain", "stream", "model", "otti-adapter", "eval-utils", "protocol", "examples"
+    "ff", "dark", "parse", "iop", "spain", "stream", "model", "otti-adapter", "eval-utils", "protocol", "examples", "llama"
 ]
 
 exclude = ["spartan-zkinterface"]

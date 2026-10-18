@@ -446,14 +446,20 @@ where
     timer.verifier(VerifierPhase::Misc, || verifier.set_commit(comm));
     let randomness = timer.verifier(VerifierPhase::Misc, || {
         let randomness = verifier.sample_normal_randomness();
-        verifier.inject_randomness();
+        verifier.refresh_matrices_after_randomness();
         randomness
     });
     timer.prover(ProverPhase::ComputeWitness, || {
         prover.set_randomness(randomness);
-        prover.inject_randomness();
+        prover.refresh_matrices_after_randomness();
         prover.compute_full_witness()
     });
+    let secondary_openings = prover.secondary_witness_openings();
+    if !secondary_openings.is_empty() {
+        timer.verifier(VerifierPhase::Misc, || {
+            verifier.bind_secondary_openings(&secondary_openings)
+        });
+    }
     let squared_error = timer.prover(ProverPhase::ComputeSquaredError, || {
         prover.compute_squared_error()
     });

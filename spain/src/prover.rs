@@ -162,6 +162,33 @@ where
         self.r1cs_matrices_int = Some(matrices);
     }
 
+    pub fn refresh_matrices_after_randomness(&mut self) {
+        if self.wit_exec.requires_challenge_matrices() {
+            let old = self
+                .r1cs_matrices_int
+                .as_ref()
+                .expect("matrices not initialized");
+            let shapes = [
+                (old.a.height(), old.a.width()),
+                (old.b.height(), old.b.width()),
+                (old.c.height(), old.c.width()),
+            ];
+            self.import_r1cs_matrices();
+            let new = self.r1cs_matrices_int.as_ref().unwrap();
+            assert_eq!(
+                shapes,
+                [
+                    (new.a.height(), new.a.width()),
+                    (new.b.height(), new.b.width()),
+                    (new.c.height(), new.c.width()),
+                ],
+                "challenge-dependent matrices changed dimensions"
+            );
+        } else {
+            self.inject_randomness();
+        }
+    }
+
     pub fn inject_randomness(&mut self) {
         if self.inject_info.is_none() {
             eprintln!("nothing to inject, skipping inject");
@@ -206,9 +233,18 @@ where
     }
 
     pub fn set_randomness(&mut self, randomness: Vec<u64>) {
+        assert_eq!(
+            randomness.len(),
+            self.metadata.num_random_values,
+            "incorrect number of verifier challenges"
+        );
         let randomness = randomness
             .into_iter()
-            .map(|v| P::from_f64(f64::from_bits(v)).unwrap())
+            .map(|v| {
+                let value = f64::from_bits(v);
+                assert!(value.is_finite(), "non-finite verifier challenge");
+                P::from_f64(value).unwrap()
+            })
             .collect::<Vec<_>>();
         self.randomness = Some(randomness);
     }
@@ -279,6 +315,23 @@ where
                 range_index: i,
                 width: z_int.width(),
                 values: extract_dense_rows(z_int, range),
+            })
+            .collect()
+    }
+
+    /// These adaptive values must be fixed before the verifier samples the
+    /// finite-field modulus. They are already disclosed by the final opening.
+    pub fn secondary_witness_openings(&self) -> Vec<ZRangeOpening<T>> {
+        let witness = self.witness.as_ref().expect("full witness not generated");
+        self.metadata
+            .get_ranges()
+            .iter()
+            .enumerate()
+            .skip(2)
+            .map(|(index, range)| ZRangeOpening {
+                range_index: index,
+                width: witness.width(),
+                values: extract_dense_rows(witness, range),
             })
             .collect()
     }
@@ -503,7 +556,12 @@ where
                 let a_val = (*val).to_i512();
                 for col in 0..z_width {
                     let z_val = z_values[z_row_offset + col].to_i512();
-                    out[row_offset + col] += a_val * z_val;
+                    let product = a_val.checked_mul(z_val).expect(
+                        "I512 overflow in constraint matrix product; reduce the fixed-point scale",
+                    );
+                    out[row_offset + col] = out[row_offset + col].checked_add(product).expect(
+                        "I512 overflow in constraint matrix sum; reduce the fixed-point scale",
+                    );
                 }
             }
         }
@@ -582,7 +640,13 @@ where
     if verbose {
         eprintln!("Computing squared error");
     }
-    let scale_squared = *scale_factor * *scale_factor;
+    assert!(
+        *scale_factor > I512::from(0),
+        "fixed-point scale must be positive"
+    );
+    let scale_squared = scale_factor
+        .checked_mul(*scale_factor)
+        .expect("I512 overflow squaring fixed-point scale");
     let az = mul_to_vec_i512(&tensors.a, z);
     let bz = mul_to_vec_i512(&tensors.b, z);
     let cz = mul_to_vec_i512(&tensors.c, z);
@@ -590,10 +654,23 @@ where
         .zip(bz.iter())
         .zip(cz.iter())
         .map(|((a, b), c)| {
-            let error = (*a * *b) - (*c * scale_squared);
-            error * error
+            let left = a.checked_mul(*b).expect(
+                "I512 overflow multiplying constraint evaluations; reduce the fixed-point scale",
+            );
+            let right = c.checked_mul(scale_squared).expect(
+                "I512 overflow scaling constraint evaluations; reduce the fixed-point scale",
+            );
+            let error = left
+                .checked_sub(right)
+                .expect("I512 overflow computing constraint residual");
+            error
+                .checked_mul(error)
+                .expect("I512 overflow squaring constraint residual; reduce the fixed-point scale")
         })
-        .fold(I512::from(0), |acc, x| acc + x)
+        .fold(I512::from(0), |acc, x| {
+            acc.checked_add(x)
+                .expect("I512 overflow summing squared residuals; reduce the fixed-point scale")
+        })
 }
 
 pub fn compute_squared_error_hp<T>(
