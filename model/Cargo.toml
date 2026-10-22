@@ -14,6 +14,10 @@ criterion = "0.6.0"
 num-traits = "0.2"
 twofloat = "0.8.4"
 i256 = { version = "0.2.2", features = ["i512"] }
+memmap2 = "0.9"
+prost = "0.14"
+rayon = "1.11"
+serde_json = "1.0"
 
 [dev-dependencies]
 tract-onnx = "0.22.1"

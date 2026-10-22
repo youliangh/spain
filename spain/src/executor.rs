@@ -25,6 +25,20 @@ where
     P: HighPrecision,
     T: HighPrecisionInt + FromF64Matrix,
 {
+    fn requires_challenge_matrices(&self) -> bool {
+        match self {
+            Self::Onnx(exec) => <OnnxExecutor<P> as R1CSInstance<P, T>>::requires_challenge_matrices(exec),
+            Self::Synthetic(exec) => <SyntheticR1CS<T> as R1CSInstance<P, T>>::requires_challenge_matrices(exec),
+        }
+    }
+
+    fn expected_public_values(&self, scale_factor: P, batch_size: usize) -> Option<Vec<T>> {
+        match self {
+            Self::Onnx(exec) => exec.expected_public_values(scale_factor, batch_size),
+            Self::Synthetic(exec) => exec.expected_public_values(scale_factor, batch_size),
+        }
+    }
+
     fn get_matrices(
         &self,
         scale_factor: P,

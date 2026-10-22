@@ -9,6 +9,7 @@ pub mod timer;
 pub mod traits;
 pub mod verifier;
 pub mod witness_gen;
+pub mod onnx_v2;
 use std::time::Duration;
 
 use model::HighPrecision;

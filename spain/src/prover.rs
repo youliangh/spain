@@ -653,7 +653,8 @@ where
     az.iter()
         .zip(bz.iter())
         .zip(cz.iter())
-        .map(|((a, b), c)| {
+        .enumerate()
+        .map(|(row, ((a, b), c))| {
             let left = a.checked_mul(*b).expect(
                 "I512 overflow multiplying constraint evaluations; reduce the fixed-point scale",
             );
@@ -665,7 +666,9 @@ where
                 .expect("I512 overflow computing constraint residual");
             error
                 .checked_mul(error)
-                .expect("I512 overflow squaring constraint residual; reduce the fixed-point scale")
+                .unwrap_or_else(|| panic!(
+                    "I512 overflow squaring constraint residual at row {row}: numerator={error}, scale={scale_factor}; check the witness/constraint agreement or reduce the fixed-point scale"
+                ))
         })
         .fold(I512::from(0), |acc, x| {
             acc.checked_add(x)

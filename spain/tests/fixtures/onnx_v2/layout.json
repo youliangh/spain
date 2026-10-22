@@ -1,0 +1,339 @@
+{
+  "schema_version": 2,
+  "coo_format": "u32le,u32le,f64le; raw records; no header",
+  "num_constraints": 73,
+  "num_public_values": 45,
+  "num_random_values": 5,
+  "num_witness_values": 68,
+  "num_secondary_witness_values": 9,
+  "num_secondary_constraint_variables": 0,
+  "matrix_entries": {
+    "A": 100,
+    "B": 81,
+    "C": 97
+  },
+  "primary_outputs": [
+    {
+      "name": "x",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 0,
+      "length": 6
+    },
+    {
+      "name": "biased.spain_materialized",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 6,
+      "length": 6
+    },
+    {
+      "name": "scaled.spain_materialized",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 12,
+      "length": 6
+    },
+    {
+      "name": "xt.spain_materialized",
+      "shape": [
+        1,
+        3,
+        2
+      ],
+      "offset": 18,
+      "length": 6
+    },
+    {
+      "name": "scores",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 24,
+      "length": 4
+    },
+    {
+      "name": "maximum",
+      "shape": [
+        1,
+        2,
+        1
+      ],
+      "offset": 28,
+      "length": 2
+    },
+    {
+      "name": "maximum.spain_max.flags",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 30,
+      "length": 4
+    },
+    {
+      "name": "maximum.spain_max.gap_root",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 34,
+      "length": 4
+    },
+    {
+      "name": "maximum.spain_max.flag_root",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 38,
+      "length": 4
+    },
+    {
+      "name": "squared",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 42,
+      "length": 4
+    },
+    {
+      "name": "mean",
+      "shape": [
+        1,
+        2,
+        1
+      ],
+      "offset": 46,
+      "length": 2
+    },
+    {
+      "name": "root",
+      "shape": [
+        1,
+        2,
+        1
+      ],
+      "offset": 48,
+      "length": 2
+    },
+    {
+      "name": "root.spain_positive_root",
+      "shape": [
+        1,
+        2,
+        1
+      ],
+      "offset": 50,
+      "length": 2
+    },
+    {
+      "name": "normalized",
+      "shape": [
+        1,
+        2,
+        2
+      ],
+      "offset": 52,
+      "length": 4
+    },
+    {
+      "name": "x.spain_domain_0_lower.root",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 56,
+      "length": 6
+    },
+    {
+      "name": "x.spain_domain_0_upper.root",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 62,
+      "length": 6
+    }
+  ],
+  "secondary_outputs": [
+    {
+      "name": "scores.spain.br",
+      "shape": [
+        1,
+        3,
+        1
+      ],
+      "offset": 0,
+      "length": 3
+    },
+    {
+      "name": "scores.spain.products",
+      "shape": [
+        1,
+        2,
+        3
+      ],
+      "offset": 3,
+      "length": 6
+    }
+  ],
+  "secondary_inputs": [
+    {
+      "name": "scaled.spain_materialized",
+      "shape": [
+        1,
+        2,
+        3
+      ]
+    },
+    {
+      "name": "xt.spain_materialized",
+      "shape": [
+        1,
+        3,
+        2
+      ]
+    }
+  ],
+  "projection_outputs": [
+    {
+      "name": "x.spain.fixed_projection",
+      "shape": [
+        1,
+        4,
+        1
+      ]
+    }
+  ],
+  "public": {
+    "constant_offset": 0,
+    "fingerprint_offset": 1,
+    "fingerprint_length": 32,
+    "inputs": [
+      {
+        "name": "input_ids",
+        "shape": [
+          1,
+          2
+        ],
+        "offset": 33,
+        "length": 2
+      }
+    ],
+    "gathers": [
+      {
+        "name": "embedded",
+        "shape": [
+          1,
+          2,
+          4
+        ],
+        "offset": 35,
+        "length": 8,
+        "table": "embedding",
+        "indices": "input_ids",
+        "axis": 0
+      }
+    ],
+    "claims": [
+      {
+        "name": "logits",
+        "shape": [
+          1,
+          1,
+          2
+        ],
+        "offset": 43,
+        "length": 2
+      }
+    ]
+  },
+  "challenge_slots": [
+    {
+      "matrix": "A",
+      "entry_offset": 0,
+      "length": 4,
+      "source": "projection",
+      "tensor": "x.spain.fixed_projection",
+      "tensor_offset": 0
+    },
+    {
+      "matrix": "C",
+      "entry_offset": 0,
+      "length": 3,
+      "source": "random",
+      "tensor_offset": 0
+    },
+    {
+      "matrix": "A",
+      "entry_offset": 4,
+      "length": 4,
+      "source": "projection",
+      "tensor": "x.spain.fixed_projection",
+      "tensor_offset": 0
+    },
+    {
+      "matrix": "C",
+      "entry_offset": 3,
+      "length": 3,
+      "source": "random",
+      "tensor_offset": 0
+    },
+    {
+      "matrix": "A",
+      "entry_offset": 32,
+      "length": 2,
+      "source": "random",
+      "tensor_offset": 3
+    },
+    {
+      "matrix": "A",
+      "entry_offset": 34,
+      "length": 2,
+      "source": "random",
+      "tensor_offset": 3
+    },
+    {
+      "matrix": "A",
+      "entry_offset": 36,
+      "length": 2,
+      "source": "random",
+      "tensor_offset": 3
+    },
+    {
+      "matrix": "C",
+      "entry_offset": 33,
+      "length": 2,
+      "source": "random",
+      "tensor_offset": 3
+    },
+    {
+      "matrix": "C",
+      "entry_offset": 35,
+      "length": 2,
+      "source": "random",
+      "tensor_offset": 3
+    }
+  ],
+  "source_graph_sha256": "de5bf7f2d27fe493529686473a94527107d011a7f5d59d3680750a1f0d72fc77",
+  "compiler_source_sha256": "de5d3d176d399fc6ec4dae27728b7fd524f7f17b8369c207a9c1d043697a4a7d"
+}

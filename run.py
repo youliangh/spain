@@ -50,6 +50,8 @@ ONNX_BENCHMARKS = [
     "gpt2-seq-32",
 ]
 
+QWEN_BENCHMARKS = {"qwen3.5-0.8b-seq-2": 2, "qwen3.5-0.8b-seq-32": 32}
+
 ZKLP_BENCHMARKS = [
     "softmax-32x32",
     "layernorm-32x768",
@@ -378,6 +380,28 @@ def run_test() -> None:
     run_lp_eval(LP_BENCHMARKS[0])
 
 
+def run_qwen_eval(args) -> None:
+    """Run the complete fixed-prefix ONNX proof through Spain's actors."""
+    if args.passes != 1 or args.baseline:
+        raise ValueError("Qwen benchmarks support Spain passes=1 only")
+    if not args.input_ids or not args.output_dir:
+        raise ValueError("Qwen requires --input-ids and a fresh --output-dir")
+    import json
+    ids = json.loads(Path(args.input_ids).read_text())
+    if isinstance(ids, dict):
+        ids = ids["input_ids"]
+    if len(ids) != QWEN_BENCHMARKS[args.benchmark]:
+        raise ValueError("Token count must match the Qwen benchmark sequence length")
+    command = [sys.executable, str(ROOT / "tools/qwen.py"), "prove",
+               "--input-ids", args.input_ids, "--output-dir", args.output_dir,
+               "--threads", str(args.threads)]
+    for flag, value in [("--model-dir", args.model_dir), ("--artifact-dir", args.artifact_dir),
+                        ("--compiled-dir", args.compiled_dir)]:
+        if value:
+            command.extend([flag, value])
+    subprocess.run(command, cwd=ROOT, check=True)
+
+
 def run_eval(name: str, passes: int, baseline: bool) -> None:
     if baseline and name in LOCATION_PRIVACY_BENCHMARKS:
         raise ValueError(
@@ -627,6 +651,12 @@ def main() -> None:
         action="store_true",
         help="Show help message",
     )
+    parser.add_argument("--model-dir", help="Local Hugging Face checkpoint for Qwen")
+    parser.add_argument("--artifact-dir", help="Qwen ONNX/circuit workspace")
+    parser.add_argument("--compiled-dir", help="Reuse an authenticated Qwen v2 circuit")
+    parser.add_argument("--input-ids", help="Qwen public INT64 token IDs as JSON")
+    parser.add_argument("--output-dir", help="Fresh directory for Qwen proof artifacts")
+    parser.add_argument("--threads", type=int, default=4, help="Qwen CPU worker count")
     args = parser.parse_args()
 
     if args.show_help:
@@ -649,11 +679,10 @@ def main() -> None:
         eval_actor(prover=False)
 
     if args.benchmark:
-        run_eval(
-            args.benchmark,
-            args.passes,
-            args.baseline,
-        )
+        if args.benchmark in QWEN_BENCHMARKS:
+            run_qwen_eval(args)
+        else:
+            run_eval(args.benchmark, args.passes, args.baseline)
 
     if args.build_onnx_circuits:
         build_onnx_circuits()

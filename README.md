@@ -118,6 +118,11 @@ Depending on your machine, you may need to increase the number of samples/iterat
 Spain shows at least an order of magnitude improvement in prover time and verifier time over baselines with the exception of zkGPT and ZKLP's verifier. Spain improves over baselines in constraint counts by 32x to 4 orders of magnitude. Additionally, Spain's verifier work grows less than linearly in batch size and verifier setup costs range from negligible to 5x the work to check a single instance. Spain's prover incurs a 3-5 order of magnitude overhead over native execution. 
 
 # Extensions
+The Qwen3.5-0.8B Dense text model uses the ONNX circuit compiler, a generic
+MPFR ONNX executor, and the existing Spain protocol. Local-weight inference,
+validation, and complete fixed-prefix proof commands are documented in
+[`qwen/README.md`](qwen/README.md).
+
 The native Llama-3.2 frontend, local-weight inference, high-precision witness
 generation, and complete forward-pass proof commands are documented in
 [`llama/README.md`](llama/README.md).

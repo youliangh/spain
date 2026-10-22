@@ -1,6 +1,7 @@
 #![feature(f128)]
 mod ops;
 mod types;
+pub mod onnx_v2;
 
 use crate::ops::*;
 pub use crate::types::{AFloat, F128, FBITS, HighPrecision, TFloat, ToPrimitiveExt};
